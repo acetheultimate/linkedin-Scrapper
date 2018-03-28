@@ -1,8 +1,11 @@
+#!/home/yogi/PycharmProjects/LinkedInScrapper/bin/python
+import os
+import sys
 import time
-import json
 import random
 import shelve
 import getpass
+import logging
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -11,12 +14,17 @@ from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.support import expected_conditions as EC
 
+FORMAT = '%(asctime)s %(message)s'
+logging.basicConfig(format=FORMAT)
+logger = logging.getLogger('LinkedInScrapper')
+logger.setLevel(logging.INFO)
+
+
 class LinkedInScrapper:
-    def __init__(self, driver_path="./chromedriver", input_fp="", output_fp=""):
+    def __init__(self, driver_path="./chromedriver", input_fp="", output_fp=sys.stdout):
         self.input_fp = input_fp
         self.output_fp = output_fp
         proxy_add, user_agent = self.generate_user_agent_and_proxy()
-        driver_path = "./chromedriver"
         service_args = [
             '--proxy=%s' % proxy_add,
             '--proxy-type=http',
@@ -32,41 +40,33 @@ class LinkedInScrapper:
 
         self.driver.set_window_size(1366, 768)
 
-    def generate_user_agent_and_proxy(self):
-        pl = ['188.32.106.120:8081',
-              '95.79.41.94:8081',
-              '188.255.29.89:8081',
-              '195.123.209.104:80',
-              '36.67.50.242:8080',
-              '36.228.41.168:8888',
-              '175.139.65.229:8080',
-              '187.87.77.76:3128',
-              '223.19.210.69:80',
-              '91.205.52.234:8081']
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/601.3.9 (KHTML, like Gecko) Version/9.0.2 Safari/601.3.9",
-            "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:15.0) Gecko/20100101 Firefox/15.0.1"]
-
-        return random.choice(pl), random.choice(user_agents)
+        self.sign_in = False
 
     def signIn(self):
-        self.driver.get("https://www.linkedin.com/mynetwork/invite-connect/connections/")
-        frame = self.driver.find_element_by_class_name("authentication-iframe")
-        self.driver.switch_to.frame(frame)
-        self.driver.find_element_by_class_name("sign-in-link").click()
-        self.driver.find_element_by_id("session_key-login").send_keys(input("Enter you LinkedIn ID: "))
-        self.driver.find_element_by_id("session_password-login").send_keys(getpass.getpass("Enter your password: "))
-        self.driver.find_element_by_id("btn-primary").click()
+        id_ = input("Enter you LinkedIn ID: ")
+        pass_ = getpass.getpass("Enter your password: ")
+        self.driver.get("https://www.linkedin.com/")
+
+        try:
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, "login-email"))
+            )
+        except TimeoutException:
+            print("Unable to login! Please report!")
+            return False
+
+        self.driver.find_element_by_id("login-email").send_keys(id_)
+        self.driver.find_element_by_id("login-password").send_keys(pass_)
+        self.driver.find_element_by_id("login-submit").click()
         time.sleep(5)
+        return True
 
-    def scrapper(self, linkedin, nr, driver):
+    def scrapper(self, linkedin):
+        logger.info("Looking for " + linkedin)
         linkedin = linkedin.strip()
-        print("Opening ", linkedin)
+        logger.info("Opening " + linkedin)
         self.driver.execute_script('window.location.href = "%s"' % linkedin)
-        print("Opened!")
-
-        print("souping it up!")
+        logger.info("Opened!")
         # soup = BeautifulSoup(self.driver.page_source, 'html.parser')
 
         # Declaration of variables needed
@@ -80,44 +80,116 @@ class LinkedInScrapper:
             element = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CLASS_NAME, "pv-top-card-section__body"))
             )
-            name = element.find_element_by_class_name("pv-top-card-section__name").text.strip()
-            location = element.find_element_by_class_name("pv-top-card-section__location").text.strip()
-            try:
-                company = element.find_element_by_class_name("pv-top-card-section__company").text.strip()
-            except NoSuchElementException:
-                company = ""
+            out_dict["name"] = element.find_element_by_class_name("pv-top-card-section__name").text.strip()
+            out_dict["location"] = element.find_element_by_class_name("pv-top-card-section__location").text.strip()
 
-            if company == "":
+            try:
+                out_dict["company"] = element.find_element_by_class_name("pv-top-card-section__company").text.strip()
+            except NoSuchElementException:
+                out_dict["company"] = ""
+
+            if out_dict["company"] == "":
                 try:
-                    company = [i.strip() for i in
+                    out_dict["company"] = [i.strip() for i in
                                element.find_element_by_class_name("pv-top-card-section__headline").text.split(" at ")][1]
                 except IndexError:
-                    company = ""
+                    out_dict["company"] = ""
             try:
-                desig = \
+                out_dict["desig"] = \
                 [i.strip() for i in element.find_element_by_class_name("pv-top-card-section__headline").text.split(" at ")][
                     0]
             except ValueError:
-                desig = element.find_element_by_class_name("pv-top-card-section__headline").text.strip()
-            try:
-                email = element.find_element_by_class_name("pv-contact-info__contact-item").text.strip()
-            except NoSuchElementException:
-                email = None
-            #     try:
-            #         phone = driver.find_element_by_class_name("ci-phone").find_element_by_class_name("pv-contact-info__contact-item").text.strip()
-            #         phone = phone.split("(")[0].strip()
-            #     except NoSuchElementException:
-            #         print("Phone is not there")
-            #         phone = ''
+                out_dict["desig"] = element.find_element_by_class_name("pv-top-card-section__headline").text.strip()
 
-            nr += 1
-            for i in out_dict:
-                out_dict[i] = eval(i)
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "contact-see-more-less"))
+                ).click()
+            except Exception as e:
+                print("Error while fetching more details")
+                print(e)
+
+            try:
+                out_dict["email"] = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, "//section[contains(@class,'ci-email')]//a"))
+                ).text
+                out_dict["phone"] = self.driver.find_element_by_xpath("//section[contains(@class,'ci-phone')]//ul").text
+
+            except Exception as e:
+                logger.warning("Error while fetching more details." + str(e))
+
             return out_dict
-        except:
+
+        except Exception as e:
+            print("Error while scraping!", e)
+            print("Output so far ", out_dict)
             return False
 
-    def data(self, operation, **kwargs):
+    def begin(self):
+        """
+        Function that contains input and output file.
+        :return:
+        """
+        sign_in = input("Do you want to sign in?(Limited information for guest) (y/n): ")
+        if sign_in == 'y' or sign_in == 'Y':
+            sign_in = self.signIn()
+        else:
+            sign_in = False
+
+        if not sign_in:
+            continue_as_guest = input("You are not logged in! Want to continue as guest?(y/n): ")
+            if continue_as_guest == 'y' or continue_as_guest == 'Y':
+                pass
+            else:
+                print("Exiting!")
+                return
+
+        dp = False
+
+        try:
+            from tabulate import tabulate
+        except ImportError:
+            print("Tabulate not found, Please install it by using `pip install tabulate`!")
+            dp = input("Want to continue with dirty print? (y/n): ")
+            if dp == 'y' or dp == 'Y':
+                dp = True
+                pass
+            else:
+                return
+
+        if not dp: # Pretty print is requested
+            if self.output_fp != sys.stdout: # Check if we are printing in a file
+                if not os.path.isfile(self.output_fp): # check if file is not present
+                    # initialize with Pretty print headings
+                    with open(self.output_fp, 'w') as f:
+                        init_ = tabulate([['', '', '', '', '', '']],
+                                         headers=['name', 'email', 'phone', 'company', 'desig', 'location'],
+                                         tablefmt="html")
+
+                        f.write(init_.split("<tbody>")[0]+"<tbody>")
+
+        # Let the crawling begin!
+        with open(self.output_fp, "a+") as f:
+            for url in enumerate(open(self.input_fp).readlines()):
+                out_ = self.scrapper(url[1])
+                if out_:
+                    logger.info("Request Completed for " + url[1] + " at " + str(url[0]))
+                    print(out_)
+                    fout_ = dict([i, [out_[i]]] for i in out_)
+                    _ = tabulate(fout_, tablefmt="html").split("tbody")
+                    print(_)
+                    f.write(_[1][1:-2])
+
+                else:
+                    continue_ = input("Some error at " + str(url[0]) + ". Want to continue? (y/n): ")
+                    if continue_ == 'y' or continue_ == 'Y':
+                        continue
+                    else:
+                        print("Exiting")
+                        return
+
+    @staticmethod
+    def data(operation, **kwargs):
         """
         :param operation: [int] 0 for reading the data
                           1 for writing new data replacing old
@@ -127,12 +199,11 @@ class LinkedInScrapper:
         :param kwargs: [dict] key(s) and value(s)
                        For reading, {"key_list": [list] key(s)}
                        For writing, {"key1": value, "key2": value ...}
-        :return: [dict] or [boolean] corresponding to read or write's success
+        :returns: [dict] or [boolean] corresponding to read or write's success
+        :rtype: dict or bool
         """
 
-        if operation == 0 or operation == 1 or operation == 2 or operation == 3:
-            pass
-        else:
+        if not (0 <= operation <= 3):
             return False
 
         with shelve.open("data.db") as f:
@@ -172,20 +243,29 @@ class LinkedInScrapper:
                 print("Error", e)
                 return False
 
-    def begin(self):
+    @staticmethod
+    def generate_user_agent_and_proxy():
         """
-        Function that contains input and output file.
-        :return:
+        Generates tuple for proxy and user-agent respectively
+        :rtype: tuple
         """
-        for url in enumerate(open("raw_out.txt").readlines()):
-            out_ = scrapper(url[1], url[0], driver)
-            if out_:
-                print("Request Completed for", url[1], "at", url[0])
+        pl = ['188.32.106.120:8081',
+              '95.79.41.94:8081',
+              '188.255.29.89:8081',
+              '195.123.209.104:80',
+              '36.67.50.242:8080',
+              '36.228.41.168:8888',
+              '175.139.65.229:8080',
+              '187.87.77.76:3128',
+              '223.19.210.69:80',
+              '91.205.52.234:8081']
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246",
+            # "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/601.3.9 (KHTML, like Gecko) Version/9.0.2 Safari/601.3.9",
+            ]
 
-            else:
-                print("Some error at", url[0])
-                continue
+        return random.choice(pl), random.choice(user_agents)
 
 
-begin(driver)
-driver.quit()
+obj = LinkedInScrapper(input_fp="input", output_fp="output")
+obj.begin()
