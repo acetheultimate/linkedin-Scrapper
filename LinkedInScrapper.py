@@ -1,4 +1,4 @@
-#!/home/yogi/PycharmProjects/LinkedInScrapper/bin/python
+#!/usr/bin/env python
 import os
 import sys
 import time
