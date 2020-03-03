@@ -24,42 +24,92 @@ class LinkedInScrapper:
     def __init__(self, driver_path="./chromedriver", input_fp="", output_fp=sys.stdout):
         self.input_fp = input_fp
         self.output_fp = output_fp
+
         proxy_add, user_agent = self.generate_user_agent_and_proxy()
         service_args = [
-            '--proxy=%s' % proxy_add,
-            '--proxy-type=http',
-            '--ssl-protocol=any',
-            '--ignore-ssl-errors=true'
+            # '--proxy=%s' % proxy_add,
+            # '--proxy-type=http',
+            # '--ssl-protocol=any',
+            # '--ignore-ssl-errors=true'
         ]
 
         opts = webdriver.ChromeOptions()
         opts.add_argument("--user-agent=%s" % user_agent)
-        self.driver = webdriver.Chrome(executable_path=driver_path,
+        self.sign_in = False
+        reuse_browser = input("Do you have a session running? (y/n): ")
+        if reuse_browser == "y":
+            self.continue_from = 'last'
+            self.sign_in = True
+            self.driver = webdriver.Remote(command_executor=input("Remote URL: "))
+            self.driver.session_id = input("Session ID: ")
+        else:
+            self.driver = webdriver.Chrome(executable_path=driver_path,
                                        service_args=service_args,
                                        chrome_options=opts)
 
+        print("URL", self.driver.command_executor._url)
+        print("SID", self.driver.session_id)
         self.driver.set_window_size(1366, 768)
 
-        self.sign_in = False
 
     def signIn(self):
         id_ = input("Enter you LinkedIn ID: ")
         pass_ = getpass.getpass("Enter your password: ")
-        self.driver.get("https://www.linkedin.com/")
+        self.driver.get("https://www.linkedin.com/login?fromSignIn=true&trk=guest_homepage-basic_nav-header-signin")
 
         try:
             WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "login-email"))
+                EC.presence_of_element_located((By.ID, "username"))
             )
         except TimeoutException:
             print("Unable to login! Please report!")
             return False
 
-        self.driver.find_element_by_id("login-email").send_keys(id_)
-        self.driver.find_element_by_id("login-password").send_keys(pass_)
-        self.driver.find_element_by_id("login-submit").click()
+        self.driver.find_element_by_id("username").send_keys(id_)
+        for key in pass_:
+            print(key)
+            self.driver.find_element_by_id("password").send_keys(key)
+            time.sleep(random.random())
+        self.driver.find_element_by_id("password").send_keys("\n")
+
         time.sleep(5)
         return True
+
+    def search_skill(self, skill_contains):
+        print(skill_contains)
+        logger.info("Searching for skill " + skill_contains)
+        if self.continue_from != "last":
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "search-global-typeahead__input"))
+            )
+
+            self.driver.find_element_by_class_name("search-global-typeahead__input").send_keys(skill_contains+"\n")
+
+            logger.info("Searched for skills. Waiting for people list")
+
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "search-vertical-filter__filter-item-button"))
+            )
+
+            self.driver.find_element_by_class_name("search-vertical-filter__filter-item-button").click()
+
+            logger.info("Clicked on people. Waiting for people serach results list")
+
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "search-result__wrapper"))
+            )
+
+        # scroll through bottom
+        self.driver.execute_script('window.scrollTo(0, 1000);')
+        logger.info("Got people list.")
+        for profile_link in self.driver.find_elements_by_class_name("search-result__result-link")[::2]:
+            # logger.info("got" + profile_link.get_attribute("href"))
+            print(profile_link.get_attribute("href"))
+            # 3dbdd0dd0b7d532db744b11ccaf5c605
+            # http://127.0.0.1:60655
+
+    def generate_input_file(self):
+        self.search_skill("Treasury Manager")
 
     def scrapper(self, linkedin):
         logger.info("Looking for " + linkedin)
@@ -142,9 +192,11 @@ class LinkedInScrapper:
                 pass
             else:
                 print("Exiting!")
+                self.driver.close()
                 return
 
         dp = False
+        self.generate_input_file()
 
         try:
             from tabulate import tabulate
@@ -260,7 +312,7 @@ class LinkedInScrapper:
               '223.19.210.69:80',
               '91.205.52.234:8081']
         user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36",
             # "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/601.3.9 (KHTML, like Gecko) Version/9.0.2 Safari/601.3.9",
             ]
 
