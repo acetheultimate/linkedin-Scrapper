@@ -32,33 +32,39 @@ class LinkedInScrapper:
             '--ignore-ssl-errors=true'
         ]
 
-        opts = webdriver.ChromeOptions()
+        # opts = webdriver.ChromeOptions()
+        opts = webdriver.FirefoxOptions()
         opts.add_argument("--user-agent=%s" % user_agent)
-        self.driver = webdriver.Chrome(executable_path=driver_path,
-                                       service_args=service_args,
-                                       chrome_options=opts)
-
+        # self.driver = webdriver.Chrome(executable_path=driver_path,
+        #                                service_args=service_args,
+        #                                chrome_options=opts)
+        self.driver = webdriver.Firefox()
         self.driver.set_window_size(1366, 768)
 
         self.sign_in = False
 
     def signIn(self):
-        id_ = input("Enter you LinkedIn ID: ")
-        pass_ = getpass.getpass("Enter your password: ")
+        # id_ = input("Enter you LinkedIn ID: ")
+        # pass_ = getpass.getpass("Enter your password: ")
+        id_ = "ankitdogra1996@gmail.com"
+        pass_ = "Linkedinkapassword."
         self.driver.get("https://www.linkedin.com/")
 
-        try:
-            WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "login-email"))
-            )
-        except TimeoutException:
-            print("Unable to login! Please report!")
-            return False
-
-        self.driver.find_element_by_id("login-email").send_keys(id_)
-        self.driver.find_element_by_id("login-password").send_keys(pass_)
-        self.driver.find_element_by_id("login-submit").click()
-        time.sleep(5)
+        # try:
+        #     WebDriverWait(self.driver, 10).until(
+        #         # EC.presence_of_element_located((By.ID, "login-email"))
+        #           EC.presence_of_element_located((By.CLASS_NAME,"sign-in-card show"))
+        #     )
+        # except TimeoutException:
+        #     print("Unable to login! Please report!")
+        #     return False
+        time.sleep(4)
+        self.driver.find_element_by_xpath("//form/div[1]/div[1]/input").send_keys(id_)
+        self.driver.find_element_by_xpath("//form/div[1]/div[2]/input").send_keys(pass_)
+        self.driver.find_element_by_class_name("sign-in-form__submit-btn").click()
+        # self.driver.find_element_by_id("login-email").send_keys(id_)
+        # self.driver.find_element_by_id("login-password").send_keys(pass_)
+        # self.driver.find_element_by_id("login-submit").click()
         return True
 
     def scrapper(self, linkedin):
@@ -68,52 +74,56 @@ class LinkedInScrapper:
         self.driver.execute_script('window.location.href = "%s"' % linkedin)
         logger.info("Opened!")
         # soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-
+        # print(soup)
         # Declaration of variables needed
         out_dict = {"name": None,
                     "email": None,
                     "phone": None,
                     "company": None,
-                    "desig": None,
+                    "designation": None,
                     "location": None}
         try:
-            element = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "pv-top-card-section__body"))
-            )
-            out_dict["name"] = element.find_element_by_class_name("pv-top-card-section__name").text.strip()
-            out_dict["location"] = element.find_element_by_class_name("pv-top-card-section__location").text.strip()
+            # out_dict["name"] = WebDriverWait(self.driver, 10).until(
+            #     EC.presence_of_element_located((By.XPATH, "//section/div[2]/div[2]/div[1]/ul[1]/li[1]"))
+            # ).text
+
+            # out_dict["name"] = element.find_element_by_class_name("inline t-24 t-black t-normal break-words").text.strip()
+            # time.sleep(4)
+            out_dict["name"] = self.driver.find_element_by_xpath("//section/div[2]/div[2]/div[1]/ul[1]/li[1]").text.strip()
+            out_dict["location"] = self.driver.find_element_by_xpath("//section/div[2]/div[2]/div[1]/ul[2]/li[1]").text.strip()
 
             try:
-                out_dict["company"] = element.find_element_by_class_name("pv-top-card-section__company").text.strip()
+                out_dict["company"] = self.driver.find_element_by_class_name("mt1 t-18 t-black t-normal").text.strip()
             except NoSuchElementException:
                 out_dict["company"] = ""
-
             if out_dict["company"] == "":
                 try:
+
                     out_dict["company"] = [i.strip() for i in
-                               element.find_element_by_class_name("pv-top-card-section__headline").text.split(" at ")][1]
+                               self.driver.find_element_by_xpath("//section/div[2]/div[2]/div[1]/h2").text.split(" at ")][1]
                 except IndexError:
                     out_dict["company"] = ""
             try:
-                out_dict["desig"] = \
-                [i.strip() for i in element.find_element_by_class_name("pv-top-card-section__headline").text.split(" at ")][
-                    0]
+                out_dict["designation"] = [i.strip() for i in self.driver.find_element_by_xpath("//section/div[2]/div[2]/div[1]/h2").text.split(" at ")][0]
             except ValueError:
-                out_dict["desig"] = element.find_element_by_class_name("pv-top-card-section__headline").text.strip()
+                out_dict["designation"] = self.driver.find_element_by_xpath("//section/div[2]/div[2]/div[1]/h2").text.strip()
 
             try:
-                WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "contact-see-more-less"))
-                ).click()
+                # WebDriverWait(self.driver, 10).until(
+                #     EC.presence_of_element_located((By.XPATH, "/html/body/div[6]/div[4]/div[3]/div/div/div/div/div[2]/main/div[1]/section/div[2]/div[2]/div[1]/ul[2]/li[3]/a/span"))
+                # ).click()
+
+
+                self.driver.find_element_by_xpath("//section/div[2]/div[2]/div[1]/ul[2]/li[3]/a/span").click()
             except Exception as e:
                 print("Error while fetching more details")
                 print(e)
 
             try:
                 out_dict["email"] = WebDriverWait(self.driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, "//section[contains(@class,'ci-email')]//a"))
+                    EC.presence_of_element_located((By.XPATH, "//section[@class='pv-contact-info__contact-type ci-email']/div"))
                 ).text
-                out_dict["phone"] = self.driver.find_element_by_xpath("//section[contains(@class,'ci-phone')]//ul").text
+                out_dict["phone"] = self.driver.find_element_by_class_name("//section[@class='pv-contact-info__contact-type ci-phone']/ul/li/span[1]").text
 
             except Exception as e:
                 logger.warning("Error while fetching more details." + str(e))
@@ -159,7 +169,8 @@ class LinkedInScrapper:
 
         if not dp: # Pretty print is requested
             if self.output_fp != sys.stdout: # Check if we are printing in a file
-                if not os.path.isfile(self.output_fp): # check if file is not present
+                if not os.path.isfile(self.output_fp):
+                    # check if file is not present
                     # initialize with Pretty print headings
                     with open(self.output_fp, 'w') as f:
                         init_ = tabulate([['', '', '', '', '', '']],
@@ -169,7 +180,7 @@ class LinkedInScrapper:
                         f.write(init_.split("<tbody>")[0]+"<tbody>")
 
         # Let the crawling begin!
-        with open(self.output_fp, "a+") as f:
+        with open(self.output_fp, "w") as f:
             for url in enumerate(open(self.input_fp).readlines()):
                 out_ = self.scrapper(url[1])
                 if out_:
@@ -177,7 +188,6 @@ class LinkedInScrapper:
                     print(out_)
                     fout_ = dict([i, [out_[i]]] for i in out_)
                     _ = tabulate(fout_, tablefmt="html").split("tbody")
-                    print(_)
                     f.write(_[1][1:-2])
 
                 else:
@@ -267,5 +277,5 @@ class LinkedInScrapper:
         return random.choice(pl), random.choice(user_agents)
 
 
-obj = LinkedInScrapper(input_fp="input", output_fp="output")
+obj = LinkedInScrapper(input_fp="/home/webmob/Desktop/file.txt", output_fp="/home/webmob/Desktop/file2.txt")
 obj.begin()
